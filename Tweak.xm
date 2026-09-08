@@ -15,6 +15,12 @@ static BOOL CRTChatHooksInstalled = NO;
 static void (*CRTOriginalChatViewDidAppear)(id, SEL, BOOL) = NULL;
 static void (*CRTOriginalChatViewDidLayoutSubviews)(id, SEL) = NULL;
 
+@interface CRTRotationToggleTarget : NSObject
+- (void)toggle:(UIBarButtonItem *)sender;
+@end
+
+static CRTRotationToggleTarget *CRTActionTarget = nil;
+
 static BOOL CRTIsLocked(void) {
     id storedValue = [NSUserDefaults.standardUserDefaults objectForKey:CRTLockedKey];
     return storedValue ? [storedValue boolValue] : YES;
@@ -113,21 +119,23 @@ static void CRTUpdateBarButton(UIBarButtonItem *barButton) {
     barButton.accessibilityValue = locked ? @"当前已锁定" : @"当前可旋转";
 }
 
+@implementation CRTRotationToggleTarget
+- (void)toggle:(UIBarButtonItem *)sender {
+    BOOL locked = !CRTIsLocked();
+    [NSUserDefaults.standardUserDefaults setBool:locked forKey:CRTLockedKey];
+    CRTUpdateBarButton(sender);
+    CRTRefreshOrientation();
+}
+@end
+
 static void CRTInstallButton(UIViewController *controller) {
     if (!controller.isViewLoaded) return;
     UIBarButtonItem *barButton = objc_getAssociatedObject(controller, CRTBarButtonKey);
     if (!barButton) {
-        __block __weak UIBarButtonItem *weakBarButton = nil;
-        UIAction *toggleAction = [UIAction actionWithHandler:^(__kindof UIAction *action) {
-            BOOL locked = !CRTIsLocked();
-            [NSUserDefaults.standardUserDefaults setBool:locked forKey:CRTLockedKey];
-            UIBarButtonItem *strongBarButton = weakBarButton;
-            if (strongBarButton) CRTUpdateBarButton(strongBarButton);
-            CRTRefreshOrientation();
-        }];
+        if (!CRTActionTarget) CRTActionTarget = [CRTRotationToggleTarget new];
         barButton = [[UIBarButtonItem alloc] initWithImage:CRTIcon(CRTIsLocked())
-            primaryAction:toggleAction menu:nil];
-        weakBarButton = barButton;
+            style:UIBarButtonItemStylePlain target:CRTActionTarget
+            action:@selector(toggle:)];
         barButton.accessibilityIdentifier = @"com.swiftss.telegramrotationtoggle.button";
         objc_setAssociatedObject(controller, CRTBarButtonKey, barButton,
             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
